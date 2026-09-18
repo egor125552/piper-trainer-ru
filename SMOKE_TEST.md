@@ -47,3 +47,17 @@ Piper_Trainer_RU_Qwen3_ASR.ipynb
 
 Canonical Linux path:
 /opt/piper-colab/Piper_Trainer_RU_Qwen3_ASR.ipynb
+
+## Exact notebook setup-cell test
+
+The exact first setup/install cell from Piper_Trainer_RU_Qwen3_ASR.ipynb was executed inside the official Colab Docker runtime.
+
+Final verified result:
+- exit code: 0
+- Piper training CLI: OK
+- Piper ONNX export CLI: OK
+- Piper commit pin: 5b355b110aecf3de8f4e000ede1ce06831acff35
+- setuptools pinned below 82 for compatibility with Torch 2.11
+- jedi installed to satisfy the bundled IPython dependency
+
+The second full setup-cell run completed successfully without the earlier setuptools/IPython dependency conflicts.
