@@ -106,3 +106,17 @@ Verified real export:
 - output WAV: mono, 22050 Hz, 2.067 seconds
 
 Result: REAL_ONNX_INFERENCE_OK
+
+## Qwen3-ASR processor/API test
+
+Verified with Qwen/Qwen3-ASR-1.7B-hf processor without loading the full 1.7B weights:
+
+- processor class: Qwen3ASRProcessor
+- apply_transcription_request accepts local file paths or numpy arrays
+- expected feature-extractor sample rate: 16000 Hz
+- BatchFeature.to(device, dtype) keeps integer token tensors as integers and casts floating audio features to float16
+- decode(return_format="transcription_only") returns the complete transcription string
+
+A bug was fixed where the notebook indexed [0] on the decoded string and therefore would have kept only the first character.
+
+The web UI now includes a dedicated single-file Qwen test before full dataset processing.
