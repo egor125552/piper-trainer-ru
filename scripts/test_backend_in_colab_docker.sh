@@ -68,6 +68,23 @@ edited='\n'.join([
 apply_text_review('Smoke Voice',edited)
 
 local, drive_p, _=project_paths('Smoke Voice')
+checked, minutes = validate_dataset_for_training(local/'dataset')
+assert checked == 2
+assert minutes > 0
+assert phrase_quality_reason('Это незаконченная фраза...', 2.5)
+continuous = Sine(440).to_audio_segment(duration=2500).apply_gain(-12)
+assert phrase_boundary_reason(continuous, 200, 2200, 100)
+
+bad = lines[0].split('|',1)[0]+'|Оборванная фраза без точки\n'+edited.splitlines()[1]
+(local/'dataset'/'metadata.csv').write_text(bad, encoding='utf-8')
+try:
+    validate_dataset_for_training(local/'dataset')
+except ValueError as exc:
+    assert 'сомнительные фразы' in str(exc)
+else:
+    raise AssertionError('bad metadata unexpectedly passed validation')
+apply_text_review('Smoke Voice',edited)
+
 shutil.rmtree(local/'dataset')
 restore_dataset_from_drive('Smoke Voice')
 
