@@ -81,3 +81,28 @@ The exact UI cell was instantiated with Gradio 6.24 and then launched locally
 inside the official Colab Docker runtime. HTTP GET to the local UI returned 200.
 
 Result: UI_HTTP_OK
+
+## Real Dmitri checkpoint and ONNX test
+
+Verified with the actual Russian Dmitri medium training checkpoint:
+
+- checkpoint size: 845,898,328 bytes
+- checkpoint epoch: 5589
+- global step: 1,478,840
+- sample rate: 22050 Hz
+- eSpeak voice: ru
+
+PyTorch 2.6+ compatibility:
+- legacy Lightning checkpoints require trusted loading with TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+- PyTorch 2.9+ / 2.11 defaults to the new ONNX exporter, which is not compatible with this old Piper VITS graph
+- the notebook patches Piper export_onnx.py to pass dynamo=False
+- setup installs onnx and onnxscript
+
+Verified real export:
+- ONNX size: 63,516,051 bytes
+- onnx.checker: OK
+- opset: 15
+- inference using the exported ONNX + adjacent .onnx.json: OK
+- output WAV: mono, 22050 Hz, 2.067 seconds
+
+Result: REAL_ONNX_INFERENCE_OK
