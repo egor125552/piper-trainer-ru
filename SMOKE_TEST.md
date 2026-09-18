@@ -120,3 +120,17 @@ Verified with Qwen/Qwen3-ASR-1.7B-hf processor without loading the full 1.7B wei
 A bug was fixed where the notebook indexed [0] on the decoded string and therefore would have kept only the first character.
 
 The web UI now includes a dedicated single-file Qwen test before full dataset processing.
+
+## Real Piper warm-start training smoke test
+
+The base Dmitri checkpoint is now used with model.warmstart_ckpt instead of ckpt_path.
+This starts a fresh fine-tune session while copying the pretrained model weights.
+
+Verified with the actual Dmitri checkpoint on a tiny synthetic Russian dataset:
+- 6 utterances processed
+- 784 parameters copied from the Dmitri checkpoint
+- 0 warm-start parameters skipped
+- one real training batch completed in Lightning fast_dev_run
+- result: WARMSTART_TRAIN_SMOKE_OK
+
+Resume from the user's own Drive checkpoint still uses ckpt_path so optimizer/epoch state is preserved.
