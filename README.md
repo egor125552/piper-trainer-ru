@@ -20,3 +20,12 @@ Features:
 ## Notebook
 
 Piper_Trainer_RU_Qwen3_ASR.ipynb
+
+## Local smoke test with the official Colab Docker image
+
+On a Linux host with Docker:
+
+    ./scripts/test_setup_in_colab_docker.sh
+
+The script extracts the real setup cell from the notebook and runs it inside
+us-docker.pkg.dev/colab-images/public/runtime:latest.
