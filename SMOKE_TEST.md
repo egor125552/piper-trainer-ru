@@ -61,3 +61,23 @@ Final verified result:
 - jedi installed to satisfy the bundled IPython dependency
 
 The second full setup-cell run completed successfully without the earlier setuptools/IPython dependency conflicts.
+
+## Backend smoke test
+
+Verified inside the official Colab Docker runtime with ASR stubbed:
+- ZIP audio input extraction
+- silence-based slicing
+- generation of two WAV clips
+- metadata.csv creation
+- VoiceOver text-editor path
+- restoring dataset from the Drive-like mirror
+- checkpoint copy and retention policy
+
+Result: BACKEND_SMOKE_TEST_OK
+
+## Gradio smoke test
+
+The exact UI cell was instantiated with Gradio 6.24 and then launched locally
+inside the official Colab Docker runtime. HTTP GET to the local UI returned 200.
+
+Result: UI_HTTP_OK
