@@ -86,6 +86,16 @@ assert all(ranges[i][1]<=ranges[i+1][0] for i in range(len(ranges)-1))
 assert all(2800<=b-a<=7100 for a,b in ranges),ranges
 assert alignment_matches_transcript(words,mock_words)
 assert not alignment_matches_transcript(words[:2],mock_words)
+# Equal-length but unrelated words must not pass a count-only alignment check.
+assert not alignment_matches_transcript(
+    [{"text":"вода"},{"text":"сила"},{"text":"время"}],
+    "кошка бегала вчера",
+)
+# Punctuation and ASR hyphenation changes must not invalidate correct words.
+assert alignment_matches_transcript(
+    [{"text":"Во"},{"text":"первых"},{"text":"мы"},{"text":"работаем"}],
+    "Во-первых, мы работаем.",
+)
 # ForcedAligner removes punctuation, which must be restored for Piper.
 punctuation_groups=[
     [{"text":"большое"},{"text":"значение"}],
