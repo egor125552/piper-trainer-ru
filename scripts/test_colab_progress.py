@@ -9,23 +9,18 @@ from types import SimpleNamespace
 
 root=Path(__file__).resolve().parents[1]
 nb=json.loads((root/'Piper_Trainer_RU_Qwen3_ASR.ipynb').read_text())
-assert len(nb['cells'])==9
+assert len(nb['cells'])==7
 code=[''.join(c['source']) for c in nb['cells']]
-for i in range(3,9): ast.parse(code[i],filename=f'cell{i}')
+for i in range(3,7): ast.parse(code[i],filename=f'cell{i}')
 assert 'Qwen3-ASR: расшифровано {completed}/{total_blocks}' in code[4]
 assert 'осталось {total_blocks-completed}' in code[4]
 assert 'Привязка слов: блок {aligned_count}/{len(records)}' in code[4]
 assert 'EpochConsoleProgress()' in code[5]
 assert '"--trainer.enable_progress_bar"' in code[5]
 assert 'inline=False' in code[6] and 'quiet=True' in code[6]
-assert 'RUN_ASR = False' in code[7] and 'ALLOW_REBUILD_EXISTING_DATASET = False' in code[7]
-assert 'RUN_TRAINING = False' in code[8]
-assert 'train_voice(' in code[8] and 'prepare_dataset(' not in code[8]
-for i in (7,8):
-    out=io.StringIO()
-    with contextlib.redirect_stdout(out):
-        exec(compile(code[i],f'cell{i}','exec'),{}, {})
-    assert 'Ничего не запущено' in out.getvalue(),(i,out.getvalue())
+assert not any('RUN_ASR =' in cell or 'RUN_TRAINING =' in cell for cell in code)
+assert 'prepare_btn.click(' in code[6] and 'train_btn.click(' in code[6]
+assert 'print(line, end="", flush=True)' in code[5]
 
 # Inspect the real runner created by the existing backend smoke; check the
 # nested f-string was expanded and its callback prints correct epoch numbers.
