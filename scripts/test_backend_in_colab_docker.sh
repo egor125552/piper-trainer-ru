@@ -160,6 +160,14 @@ local,drive,_=project_paths("Smoke Voice")
 dataset=local/"dataset"
 assert (dataset/"full_transcript.txt").exists()
 assert (dataset/"context_blocks.json").exists()
+alignment_dir=dataset/"alignment_cache"
+assert alignment_dir.is_dir()
+cached=list(alignment_dir.glob("block_*.json"))
+assert len(cached)==len(blocks),(len(cached),len(blocks))
+first_alignment=json.loads(cached[0].read_text(encoding="utf-8"))
+assert first_alignment["words"] and first_alignment["transcript"]
+assert all("start_time" in w and "end_time" in w for w in first_alignment["words"])
+assert (drive/"dataset"/"alignment_cache"/cached[0].name).is_file()
 assert len((dataset/"full_transcript.txt").read_text().splitlines())==len(blocks)
 assert events.count("asr")==len(blocks)
 assert events.count("align")==len(blocks)
