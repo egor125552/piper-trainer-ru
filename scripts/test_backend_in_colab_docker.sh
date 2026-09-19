@@ -96,6 +96,38 @@ except ValueError:
     pass
 else:
     raise AssertionError('unknown file slipped through manual verification')
+# Approved recovered clips require their ZIP, and are copied without fresh ASR.
+recovered_name='my_voice_recovered_000003.wav'
+recovered_src=root/recovered_name
+Sine(510).to_audio_segment(duration=2000).apply_gain(-12).export(recovered_src,format='wav')
+recovered_manifest=(
+    'file,source_index,start_sec,end_sec,duration,text,reason,approximate_boundaries\n'
+    + recovered_name+',3,8.0,10.0,2.0,Это проверенная восстановленная запись.,unfinished,True\n'
+)
+recovered_zip=root/'recovered_audio_for_colab.zip'
+with zipfile.ZipFile(recovered_zip,'w') as z:
+    z.writestr('recovered_review.csv',recovered_manifest)
+    z.write(recovered_src,'recovered_audio/'+recovered_name)
+mix=root/'reviewed_with_recovered.csv'
+mix.write_text(lines[0]+'\n'+recovered_name+'|Это проверенная восстановленная запись.\n',encoding='utf-8')
+try:
+    create_verified_project('Smoke Voice','Smoke Missing Archive',str(mix))
+except ValueError as exc:
+    assert 'zip' in str(exc).lower()
+else:
+    raise AssertionError('recovered WAV without source archive accepted')
+mix_prev=DRIVE_ROOT/'Smoke_With_Recovery'
+if mix_prev.exists():
+    shutil.rmtree(mix_prev)
+mix_result,mix_name=create_verified_project(
+    'Smoke Voice','Smoke With Recovery',str(mix),str(recovered_zip)
+)
+assert mix_name=='Smoke_With_Recovery'
+mix_local,_,_=project_paths('Smoke With Recovery')
+assert (mix_local/'dataset'/'wav'/recovered_name).read_bytes()==recovered_src.read_bytes()
+assert validate_dataset_for_training(mix_local/'dataset')[0]==2
+assert 'Из восстановленных: 1' in mix_result
+
 original_cache = list((drive_p/'source').glob('source_*.zip'))
 assert original_cache
 source_paths=(drive_p/'source'/'source_paths.txt').read_text(encoding='utf-8').splitlines()
