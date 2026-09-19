@@ -97,6 +97,17 @@ assert punctuate_aligned_groups(
 assert punctuate_aligned_groups(
     [[{"text":"ODKB"},{"text":"не"}]],"ODKB не."
 )==["ODKB не."]
+# When multiple 3-6s segmentations are possible, do not end a phrase
+# on a conjunction merely because that boundary is closer to 4.5s.
+syntax_words=[
+    {"text":("и" if i==9 else "работаем"),
+     "start_time":i*0.45,"end_time":(i+1)*0.45}
+    for i in range(20)
+]
+syntax_groups=word_groups(syntax_words,9.0,min_sec=3,max_sec=6)
+assert len(syntax_groups)==2,syntax_groups
+assert syntax_groups[0][-1]["text"]!="и",syntax_groups
+
 # Real Qwen ForcedAligner output on the user recording included punctuation
 # and short function words with start_time == end_time, as well as one
 # multi-second word (3.12s). Those are not reasons to discard 24s of speech.
