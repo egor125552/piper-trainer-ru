@@ -71,6 +71,31 @@ local, drive_p, _=project_paths('Smoke Voice')
 checked, minutes = validate_dataset_for_training(local/'dataset')
 assert checked == 2
 assert minutes > 0
+checked_file=root/'metadata_checked.csv'
+checked_file.write_text(edited, encoding='utf-8')
+# UI and backend smoke share a persistent fake Drive container.
+verified_previous=DRIVE_ROOT/'Smoke_Verified'
+if verified_previous.exists():
+    shutil.rmtree(verified_previous)
+checked_result,new_project=create_verified_project('Smoke Voice','Smoke Verified',str(checked_file))
+assert 'Smoke_Verified' in checked_result and new_project=='Smoke_Verified'
+verified_local, verified_drive, _=project_paths('Smoke Verified')
+assert len((verified_local/'dataset'/'metadata.csv').read_text().splitlines())==2
+assert (verified_drive/'dataset'/'approved_by_review.txt').exists()
+try:
+    create_verified_project('Smoke Voice','Smoke Verified',str(checked_file))
+except FileExistsError:
+    pass
+else:
+    raise AssertionError('verified import overwrote an existing dataset')
+invalid_file=root/'invalid_review.csv'
+invalid_file.write_text('unknown.wav|Несуществующая запись.\n', encoding='utf-8')
+try:
+    create_verified_project('Smoke Voice','Smoke Untrusted',str(invalid_file))
+except ValueError:
+    pass
+else:
+    raise AssertionError('unknown file slipped through manual verification')
 original_cache = list((drive_p/'source').glob('source_*.zip'))
 assert original_cache
 source_paths=(drive_p/'source'/'source_paths.txt').read_text(encoding='utf-8').splitlines()
