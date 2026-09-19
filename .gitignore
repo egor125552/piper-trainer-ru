@@ -3,3 +3,5 @@ pip-cache/
 piper1-gpl/
 __pycache__/
 *.pyc
+
+.gradio/
