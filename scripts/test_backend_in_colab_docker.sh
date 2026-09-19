@@ -71,11 +71,44 @@ local, drive_p, _=project_paths('Smoke Voice')
 checked, minutes = validate_dataset_for_training(local/'dataset')
 assert checked == 2
 assert minutes > 0
+original_cache = list((drive_p/'source').glob('source_*.zip'))
+assert original_cache
+source_paths=(drive_p/'source'/'source_paths.txt').read_text(encoding='utf-8').splitlines()
+assert len(source_paths)==1 and Path(source_paths[0]).exists()
+assert Path(source_paths[0]).read_bytes()==zpath.read_bytes()
+overlap_csv=local/'dataset'/'review.csv'
+original_review=overlap_csv.read_text(encoding='utf-8')
+overlap_table=pd.read_csv(overlap_csv)
+overlap_table.loc[1,'start_sec']=float(overlap_table.loc[0,'end_sec'])-0.3
+overlap_table.to_csv(overlap_csv,index=False,encoding='utf-8')
+try:
+    validate_dataset_for_training(local/'dataset')
+except ValueError as exc:
+    assert 'перекрытие речи' in str(exc)
+else:
+    raise AssertionError('overlapping clips should not pass the training gate')
+overlap_csv.write_text(original_review,encoding='utf-8')
 assert phrase_quality_reason('Это незаконченная фраза...', 2.5)
 assert phrase_quality_reason('Мы начинаем проверку без конечного знака', 3.0, allow_unpunctuated_clause=True) is None
 assert unfinished_syntax('Мы должны быть готовы к')
 assert phrase_quality_reason('Мы должны быть готовы к', 3.0, allow_unpunctuated_clause=True)
 assert not unfinished_syntax('Мы закончили важную совместную работу')
+assert not phrase_quality_reason('Это проверенная фраза.', 2.5)
+assert phrase_quality_reason('Мы всё обсудили, но.', 2.5)
+# Previously 350 ms padding duplicated neighboring speech across their WAVs.
+adjacent = (
+    AudioSegment.silent(duration=400)
+    + Sine(440).to_audio_segment(duration=1800).apply_gain(-12)
+    + AudioSegment.silent(duration=220)
+    + Sine(660).to_audio_segment(duration=1800).apply_gain(-12)
+    + AudioSegment.silent(duration=400)
+)
+ranges = smart_segment_ranges(
+    adjacent, min_silence_ms=160, silence_db=-35,
+    min_sec=1.0, max_sec=3.0, padding_ms=350, merge_gap_ms=0,
+)
+assert len(ranges) == 2, ranges
+assert ranges[0][1] <= ranges[1][0], ranges
 quiet = AudioSegment.silent(duration=400) + Sine(440).to_audio_segment(duration=2000).apply_gain(-12) + AudioSegment.silent(duration=400)
 assert natural_clause_boundary(quiet, 200, 2600)
 assert not natural_clause_boundary(Sine(440).to_audio_segment(duration=2500).apply_gain(-12), 200, 2200)
