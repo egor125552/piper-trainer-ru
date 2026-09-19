@@ -86,6 +86,30 @@ assert all(ranges[i][1]<=ranges[i+1][0] for i in range(len(ranges)-1))
 assert all(2800<=b-a<=7100 for a,b in ranges),ranges
 assert alignment_matches_transcript(words,mock_words)
 assert not alignment_matches_transcript(words[:2],mock_words)
+# Real Qwen ForcedAligner output on the user recording included punctuation
+# and short function words with start_time == end_time, as well as one
+# multi-second word (3.12s). Those are not reasons to discard 24s of speech.
+relaxed=[
+    {"text":"Мы","start_time":0.25,"end_time":0.62},
+    {"text":"уже","start_time":0.66,"end_time":1.13},
+    {"text":"работаем","start_time":1.16,"end_time":2.35},
+    {"text":"с","start_time":2.35,"end_time":2.35},
+    {"text":"другом","start_time":2.36,"end_time":3.33},
+    {"text":"продолжительно","start_time":3.35,"end_time":6.47},
+    {"text":"говорим","start_time":6.52,"end_time":7.33},
+    {"text":"и","start_time":7.33,"end_time":7.33},
+    {"text":"проверяем","start_time":7.35,"end_time":8.75},
+    {"text":"точность","start_time":8.85,"end_time":9.74},
+    {"text":"всей","start_time":9.81,"end_time":10.25},
+    {"text":"записи.","start_time":10.4,"end_time":11.54}
+]
+relaxed_groups=word_groups(relaxed,12.0,min_sec=3.0,max_sec=6.0)
+assert len(relaxed_groups)>=2,relaxed_groups
+assert [w["text"] for g in relaxed_groups for w in g]==[w["text"] for w in relaxed]
+assert all(
+    relaxed_groups[i][-1]["end_time"]<=relaxed_groups[i+1][0]["start_time"]
+    for i in range(len(relaxed_groups)-1)
+)
 
 events.clear()
 df,summary,review,editor=prepare_dataset(
