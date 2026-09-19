@@ -186,6 +186,36 @@ except RuntimeError:
 else:
     raise AssertionError("missing timestamps unexpectedly allowed training")
 assert (drive/"dataset"/"metadata.csv").read_bytes()==previous
+# A user can correct metadata.csv on Drive while Colab keeps old labels
+# and stale phoneme cache. Training must refresh both without touching the
+# project's checkpoints, and it must not start training during this test.
+drive_meta=drive/"dataset"/"metadata.csv"
+original_text=drive_meta.read_text(encoding="utf-8")
+drive_meta.write_text(
+    original_text.replace("Мы проверяем", "Мы, проверяем", 1),
+    encoding="utf-8",
+)
+(local/"cache").mkdir(exist_ok=True)
+(local/"cache"/"old_phonemes").write_text("stale",encoding="utf-8")
+(local/"checkpoints").mkdir(exist_ok=True)
+(local/"checkpoints"/"keep.ckpt").write_bytes(b"sentinel")
+gen=train_voice("Smoke Voice",1,1,"Каждые N эпох",1,2,1,"Dmitri medium")
+header=next(gen)
+assert "Проверено реальных фраз" in header
+assert (dataset/"metadata.csv").read_bytes()==drive_meta.read_bytes()
+assert not (local/"cache"/"old_phonemes").exists()
+assert (local/"checkpoints"/"keep.ckpt").read_bytes()==b"sentinel"
+gen.close()
+# If an old Colab cache misses an audio file, restoring it must not alter
+# the current Drive dataset or any training checkpoint.
+missing_name=drive_meta.read_text(encoding="utf-8").splitlines()[0].split("|")[0]
+(dataset/"wav"/missing_name).unlink()
+gen=train_voice("Smoke Voice",1,1,"Каждые N эпох",1,2,1,"Dmitri medium")
+next(gen)
+assert (dataset/"wav"/missing_name).is_file()
+assert (local/"checkpoints"/"keep.ckpt").read_bytes()==b"sentinel"
+gen.close()
+
 print("CONTEXT_ASR_ALIGN_SPLIT_SMOKE_OK")
 
 ''')
