@@ -5,8 +5,9 @@
 Google Colab notebook for fine-tuning Russian Piper voices.
 
 Features:
-- Qwen3-ASR 1.7B transcription
-- automatic slicing of long recordings
+- Qwen3-ASR 1.7B: one transcription pass over the complete source in 15–29-second context blocks
+- Qwen3-ForcedAligner 0.6B: word timestamps derived from that transcription without ASR again
+- only then automatic 3–6-second slicing between words, with non-overlapping WAVs
 - VoiceOver-friendly text review
 - Piper fine-tuning from ru_RU-dmitri-medium
 - configurable checkpoint frequency and retention
@@ -39,7 +40,7 @@ us-docker.pkg.dev/colab-images/public/runtime:latest.
 5. При подключении Google Drive подтвердите доступ.
 6. В открывшемся Gradio-интерфейсе сначала используйте **«Проверить Qwen на одном аудиофайле»**.
 7. Если распознавание работает, загрузите длинные записи или ZIP и нажмите **«Распознать и подготовить датасет»**.
-8. Исправьте текст в VoiceOver-friendly редакторе: имя.wav|текст.
+8. Полная расшифровка сохраняется в full_transcript.txt. В dataset/needs_review.csv попадают лишь сомнительные границы и сегменты; править каждую фразу вручную не требуется. При необходимости используйте VoiceOver-редактор.
 9. Перейдите во вкладку **«Обучение»**, выберите число дополнительных эпох и частоту checkpoint.
 10. После обучения во вкладке **«Экспорт»** получите ONNX + JSON в ZIP.
 
@@ -63,4 +64,8 @@ MyDrive/PiperTrainer/<имя проекта>/
 - запуск Gradio и HTTP 200;
 - API Qwen3ASRProcessor без загрузки полных 1.7B весов.
 
-Полный Qwen3-ASR 1.7B и реальный training step требуют GPU и проверяются уже в облачном Colab T4.
+Распознавание всей длинной записи не означает один вызов модели на 23 минуты: на T4 запись сначала последовательно обрабатывается большими блоками, объединённый текст сохраняется, и лишь после окончания всего прохода загружается aligner и создаются короткие WAV.
+
+ASR и aligner выполняются последовательно, чтобы не держать обе модели в VRAM T4 одновременно. Это не гарантирует 100% безошибочную расшифровку: сомнительные фрагменты сохраняются отдельно вместо включения в обучение.
+
+Проверка backend на Linux использует подставные результаты ASR и ForcedAligner. Реальные веса Qwen3-ASR 1.7B, ForcedAligner 0.6B и качество их работы на конкретном исходном аудио проверяются в Colab с GPU.

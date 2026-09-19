@@ -19,210 +19,129 @@ parts = [
 for i in (3, 4, 5):
     parts.append("".join(nb["cells"][i]["source"]))
 parts.append(r'''
-def load_asr():
-    return object()
-def transcribe_file(path):
-    return "Тестовая фраза для проверки датасета."
-def unload_asr():
-    pass
 
+# Test-only ASR stub.
 from pydub.generators import Sine
 from pydub import AudioSegment
-import zipfile, shutil, os, time
+import shutil,zipfile,time,wave
 
-root=Path('/content/piper-colab/work/backend_smoke')
-if root.exists():
-    shutil.rmtree(root)
+events=[]
+mock_words="Мы проверяем качество новой записи и границы всех слов "*5
+
+def load_asr():
+    events.append("load_asr")
+    return object()
+def transcribe_file(path):
+    events.append("asr")
+    seconds=len(AudioSegment.from_wav(path))/1000;return ("Мы проверяем качество новой записи и границы всех слов "*max(2,round(seconds/4))).strip()+"."
+def unload_asr():
+    events.append("unload_asr")
+def load_aligner():
+    events.append("load_aligner")
+    return object()
+def align_context(path, text):
+    events.append("align")
+    length=len(AudioSegment.from_wav(path))/1000
+    tokens=text.split()
+    step=(length-0.8)/len(tokens)
+    return [
+        {"text":token,"start_time":0.34+i*step,
+         "end_time":0.34+i*step+min(0.25,step*0.75)}
+        for i,token in enumerate(tokens)
+    ]
+def unload_aligner():
+    events.append("unload_aligner")
+
+root=Path("/content/piper-colab/work/context_smoke")
+shutil.rmtree(root,ignore_errors=True)
 root.mkdir(parents=True)
-WORK_ROOT=root/'local'
+WORK_ROOT=root/"local"
 WORK_ROOT.mkdir()
+DRIVE_ROOT=root/"drive"
+DRIVE_ROOT.mkdir()
 
-audio = Sine(440).to_audio_segment(duration=2000).apply_gain(-12)
-audio += AudioSegment.silent(duration=800)
-audio += Sine(660).to_audio_segment(duration=2000).apply_gain(-12)
-src=root/'long.wav'
-audio.export(src,format='wav')
+# 16 seconds, including real pauses, with enough words for three short phrases.
+audio=AudioSegment.silent(duration=250)
+for freq in (410,440,470,500):
+    audio+=Sine(freq).to_audio_segment(duration=3700).apply_gain(-14)
+    audio+=AudioSegment.silent(duration=300)
+source=root/"original.wav"
+audio.export(source,format="wav")
+long_source=root/"long.wav"
+(audio*4).export(long_source,format="wav")
+zfile=root/"source.zip"
+with zipfile.ZipFile(zfile,"w") as archive:
+    archive.write(long_source,"recordings/long.wav")
 
-zpath=root/'input.zip'
-with zipfile.ZipFile(zpath,'w') as z:
-    z.write(src,'nested/long.wav')
-    z.writestr('__MACOSX/junk.txt','junk')
+blocks=context_blocks(audio*4)
+assert len(blocks)>=2,blocks
+assert all(blocks[i][1]==blocks[i+1][0] for i in range(len(blocks)-1))
+assert blocks[0][0]==0 and blocks[-1][1]==len(audio*4)
 
-df, summary, review, editor = prepare_dataset(
-    [str(zpath)], 'Smoke Voice',
-    min_silence_ms=400,
-    silence_db=-35,
-    min_sec=1.0,
-    max_sec=12,
-    padding_ms=100,
+words=align_context(source," ".join(mock_words.split()))
+groups=word_groups(words,len(audio)/1000)
+ranges=word_group_audio_ranges(groups,len(audio),90)
+assert len(groups)>=2,groups
+assert all(ranges[i][1]<=ranges[i+1][0] for i in range(len(ranges)-1))
+assert all(2800<=b-a<=7100 for a,b in ranges),ranges
+assert alignment_matches_transcript(words,mock_words)
+assert not alignment_matches_transcript(words[:2],mock_words)
+
+events.clear()
+df,summary,review,editor=prepare_dataset(
+    [str(zfile)],"Smoke Voice",250,-35,3.0,6.0,90
 )
-assert len(df)==2
-metadata=WORK_ROOT/safe_name('Smoke Voice')/'dataset'/'metadata.csv'
-lines=metadata.read_text(encoding='utf-8').splitlines()
-assert len(lines)==2
+assert len(df)>=2,(summary,df)
+assert "Путин" not in str(source)
+assert all(2.8<=float(x)<=7.1 for x in df["duration"])
+assert len(set(df["file"]))==len(df)
+assert "load_asr" in events and "load_aligner" in events
+assert events.index("unload_asr")<events.index("load_aligner")
+assert max(i for i,v in enumerate(events) if v=="asr")<min(
+    i for i,v in enumerate(events) if v=="align"
+)
+local,drive,_=project_paths("Smoke Voice")
+dataset=local/"dataset"
+assert (dataset/"full_transcript.txt").exists()
+assert (dataset/"context_blocks.json").exists()
+assert len((dataset/"full_transcript.txt").read_text().splitlines())==len(blocks)
+assert events.count("asr")==len(blocks)
+assert events.count("align")==len(blocks)
+assert not (dataset/"context_audio").exists()
+assert validate_dataset_for_training(dataset)[0]==len(df)
+assert (drive/"dataset"/"full_transcript.txt").exists()
+assert (drive/"source"/"source_paths.txt").exists()
+assert any((drive/"source").glob("source_*.zip"))
+review_df=pd.read_csv(dataset/"review.csv")
+for previous,current in zip(review_df.itertuples(),list(review_df.itertuples())[1:]):
+    assert float(previous.end_sec)<=float(current.start_sec)+0.02
 
-edited='\n'.join([
-    lines[0].split('|',1)[0]+'|Первая исправленная фраза.',
-    lines[1].split('|',1)[0]+'|Вторая исправленная фраза.',
-])
-apply_text_review('Smoke Voice',edited)
+checked=root/"approved.csv"
+checked.write_text(df.iloc[0]["file"]+"|Это проверенная фраза для синтеза.\n",encoding="utf-8")
+result,newname=create_verified_project("Smoke Voice","Verified Voice",str(checked))
+assert newname=="Verified_Voice" and "Verified_Voice" in result
+verified,_,_=project_paths("Verified Voice")
+assert validate_dataset_for_training(verified/"dataset")[0]==1
+assert len((local/"dataset"/"metadata.csv").read_text().splitlines())==len(df)
 
-local, drive_p, _=project_paths('Smoke Voice')
-checked, minutes = validate_dataset_for_training(local/'dataset')
-assert checked == 2
-assert minutes > 0
-checked_file=root/'metadata_checked.csv'
-checked_file.write_text(edited, encoding='utf-8')
-# UI and backend smoke share a persistent fake Drive container.
-verified_previous=DRIVE_ROOT/'Smoke_Verified'
-if verified_previous.exists():
-    shutil.rmtree(verified_previous)
-checked_result,new_project=create_verified_project('Smoke Voice','Smoke Verified',str(checked_file))
-assert 'Smoke_Verified' in checked_result and new_project=='Smoke_Verified'
-verified_local, verified_drive, _=project_paths('Smoke Verified')
-assert len((verified_local/'dataset'/'metadata.csv').read_text().splitlines())==2
-assert (verified_drive/'dataset'/'approved_by_review.txt').exists()
+# Rebuilding the same project must keep the old dataset as a Drive backup.
+prepare_dataset([str(source)],"Smoke Voice",250,-35,3.0,6.0,90)
+assert list(drive.glob("dataset_backup_*"))
+assert (drive/"dataset"/"full_transcript.txt").exists()
+
+# If aligner fails, preserve the already-saved good dataset and checkpoints.
+previous=(drive/"dataset"/"metadata.csv").read_bytes()
+def align_context(path, text):
+    raise ValueError("test aligner failure")
 try:
-    create_verified_project('Smoke Voice','Smoke Verified',str(checked_file))
-except FileExistsError:
+    prepare_dataset([str(source)],"Smoke Voice",250,-35,3.0,6.0,90)
+except RuntimeError:
     pass
 else:
-    raise AssertionError('verified import overwrote an existing dataset')
-invalid_file=root/'invalid_review.csv'
-invalid_file.write_text('unknown.wav|Несуществующая запись.\n', encoding='utf-8')
-try:
-    create_verified_project('Smoke Voice','Smoke Untrusted',str(invalid_file))
-except ValueError:
-    pass
-else:
-    raise AssertionError('unknown file slipped through manual verification')
-# Approved recovered clips require their ZIP, and are copied without fresh ASR.
-recovered_name='my_voice_recovered_000003.wav'
-recovered_src=root/recovered_name
-Sine(510).to_audio_segment(duration=2000).apply_gain(-12).export(recovered_src,format='wav')
-recovered_manifest=(
-    'file,source_index,start_sec,end_sec,duration,text,reason,approximate_boundaries\n'
-    + recovered_name+',3,8.0,10.0,2.0,Это проверенная восстановленная запись.,unfinished,True\n'
-)
-recovered_zip=root/'recovered_audio_for_colab.zip'
-with zipfile.ZipFile(recovered_zip,'w') as z:
-    z.writestr('recovered_review.csv',recovered_manifest)
-    z.write(recovered_src,'recovered_audio/'+recovered_name)
-mix=root/'reviewed_with_recovered.csv'
-mix.write_text(lines[0]+'\n'+recovered_name+'|Это проверенная восстановленная запись.\n',encoding='utf-8')
-try:
-    create_verified_project('Smoke Voice','Smoke Missing Archive',str(mix))
-except ValueError as exc:
-    assert 'zip' in str(exc).lower()
-else:
-    raise AssertionError('recovered WAV without source archive accepted')
-mix_prev=DRIVE_ROOT/'Smoke_With_Recovery'
-if mix_prev.exists():
-    shutil.rmtree(mix_prev)
-mix_result,mix_name=create_verified_project(
-    'Smoke Voice','Smoke With Recovery',str(mix),str(recovered_zip)
-)
-assert mix_name=='Smoke_With_Recovery'
-mix_local,_,_=project_paths('Smoke With Recovery')
-assert (mix_local/'dataset'/'wav'/recovered_name).read_bytes()==recovered_src.read_bytes()
-assert validate_dataset_for_training(mix_local/'dataset')[0]==2
-assert 'Из восстановленных: 1' in mix_result
+    raise AssertionError("missing timestamps unexpectedly allowed training")
+assert (drive/"dataset"/"metadata.csv").read_bytes()==previous
+print("CONTEXT_ASR_ALIGN_SPLIT_SMOKE_OK")
 
-original_cache = list((drive_p/'source').glob('source_*.zip'))
-assert original_cache
-source_paths=(drive_p/'source'/'source_paths.txt').read_text(encoding='utf-8').splitlines()
-assert len(source_paths)==1 and Path(source_paths[0]).exists()
-assert Path(source_paths[0]).read_bytes()==zpath.read_bytes()
-overlap_csv=local/'dataset'/'review.csv'
-original_review=overlap_csv.read_text(encoding='utf-8')
-overlap_table=pd.read_csv(overlap_csv)
-overlap_table.loc[1,'start_sec']=float(overlap_table.loc[0,'end_sec'])-0.3
-overlap_table.to_csv(overlap_csv,index=False,encoding='utf-8')
-try:
-    validate_dataset_for_training(local/'dataset')
-except ValueError as exc:
-    assert 'перекрытие речи' in str(exc)
-else:
-    raise AssertionError('overlapping clips should not pass the training gate')
-overlap_csv.write_text(original_review,encoding='utf-8')
-assert phrase_quality_reason('Это незаконченная фраза...', 2.5)
-assert phrase_quality_reason('Мы начинаем проверку без конечного знака', 3.0, allow_unpunctuated_clause=True) is None
-assert unfinished_syntax('Мы должны быть готовы к')
-assert phrase_quality_reason('Мы должны быть готовы к', 3.0, allow_unpunctuated_clause=True)
-assert not unfinished_syntax('Мы закончили важную совместную работу')
-assert not phrase_quality_reason('Это проверенная фраза.', 2.5)
-assert phrase_quality_reason('Мы всё обсудили, но.', 2.5)
-# Previously 350 ms padding duplicated neighboring speech across their WAVs.
-adjacent = (
-    AudioSegment.silent(duration=400)
-    + Sine(440).to_audio_segment(duration=1800).apply_gain(-12)
-    + AudioSegment.silent(duration=220)
-    + Sine(660).to_audio_segment(duration=1800).apply_gain(-12)
-    + AudioSegment.silent(duration=400)
-)
-ranges = smart_segment_ranges(
-    adjacent, min_silence_ms=160, silence_db=-35,
-    min_sec=1.0, max_sec=3.0, padding_ms=350, merge_gap_ms=0,
-)
-assert len(ranges) == 2, ranges
-assert ranges[0][1] <= ranges[1][0], ranges
-quiet = AudioSegment.silent(duration=400) + Sine(440).to_audio_segment(duration=2000).apply_gain(-12) + AudioSegment.silent(duration=400)
-assert natural_clause_boundary(quiet, 200, 2600)
-assert not natural_clause_boundary(Sine(440).to_audio_segment(duration=2500).apply_gain(-12), 200, 2200)
-
-original_transcribe = transcribe_file
-def transcribe_file(path):
-    if '000002' in Path(path).stem:
-        return 'Мы должны быть готовы к'
-    return 'Мы выполнили полезную проверку.'
-filtered, _, _, _ = prepare_dataset([str(src)], 'Review Voice', 400, -35, 1.0, 12, 100)
-assert len(filtered)==1
-review_local, _, _ = project_paths('Review Voice')
-needs_review = review_local/'dataset'/'needs_review.csv'
-assert needs_review.exists()
-assert 'needs_review_wav' in needs_review.read_text(encoding='utf-8')
-assert len(list((review_local/'dataset'/'needs_review_wav').glob('*.wav')))==1
-transcribe_file = original_transcribe
-clause_src=root/'clauses.wav'
-quiet.export(clause_src, format='wav')
-def transcribe_file(path):
-    return 'Здесь звучит обычная фраза'
-clauses, _, _, _ = prepare_dataset([str(clause_src)], 'Clause Voice', 200, -35, 1.0, 12, 350)
-assert len(clauses)==1, len(clauses)
-clause_local, _, _ = project_paths('Clause Voice')
-clause_files=(clause_local/'dataset'/'natural_clause_files.txt').read_text(encoding='utf-8').splitlines()
-assert len(clause_files)==1
-assert validate_dataset_for_training(clause_local/'dataset')[0]==1
-transcribe_file = original_transcribe
-
-continuous = Sine(440).to_audio_segment(duration=2500).apply_gain(-12)
-assert phrase_boundary_reason(continuous, 200, 2200, 100)
-
-bad = lines[0].split('|',1)[0]+'|Оборванная фраза без точки\n'+edited.splitlines()[1]
-(local/'dataset'/'metadata.csv').write_text(bad, encoding='utf-8')
-try:
-    validate_dataset_for_training(local/'dataset')
-except ValueError as exc:
-    assert 'сомнительные фразы' in str(exc)
-else:
-    raise AssertionError('bad metadata unexpectedly passed validation')
-apply_text_review('Smoke Voice',edited)
-
-shutil.rmtree(local/'dataset')
-restore_dataset_from_drive('Smoke Voice')
-
-lc=local/'checkpoints'
-dc=drive_p/'checkpoints'
-lc.mkdir(parents=True,exist_ok=True)
-for i in range(5):
-    p=lc/f'test-{i}.ckpt'
-    p.write_bytes(bytes([i])*10)
-    os.utime(p,(time.time()+i,time.time()+i))
-sync_checkpoints(lc,dc,2)
-assert len(list(lc.glob('*.ckpt')))==2
-assert len(list(dc.glob('*.ckpt')))==2
-
-print('BACKEND_SMOKE_TEST_OK')
 ''')
 (root / "work").mkdir(exist_ok=True)
 (root / "work" / "backend_smoke.py").write_text("\n".join(parts), encoding="utf-8")
