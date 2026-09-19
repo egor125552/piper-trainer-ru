@@ -86,6 +86,17 @@ assert all(ranges[i][1]<=ranges[i+1][0] for i in range(len(ranges)-1))
 assert all(2800<=b-a<=7100 for a,b in ranges),ranges
 assert alignment_matches_transcript(words,mock_words)
 assert not alignment_matches_transcript(words[:2],mock_words)
+# ForcedAligner removes punctuation, which must be restored for Piper.
+punctuation_groups=[
+    [{"text":"большое"},{"text":"значение"}],
+    [{"text":"Нам"},{"text":"все"},{"text":"во-первых"}],
+]
+assert punctuate_aligned_groups(
+    punctuation_groups,"большое значение. Нам все, во-первых."
+)==["большое значение.","Нам все, во-первых."]
+assert punctuate_aligned_groups(
+    [[{"text":"ODKB"},{"text":"не"}]],"ODKB не."
+)==["ODKB не."]
 # Real Qwen ForcedAligner output on the user recording included punctuation
 # and short function words with start_time == end_time, as well as one
 # multi-second word (3.12s). Those are not reasons to discard 24s of speech.
