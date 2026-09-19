@@ -12,7 +12,7 @@ port = int(sys.argv[2])
 nb = json.loads((root / "Piper_Trainer_RU_Qwen3_ASR.ipynb").read_text(encoding="utf-8"))
 base = (root / "work" / "backend_smoke.py").read_text(encoding="utf-8").split("# Test-only ASR stub.")[0]
 ui = "".join(nb["cells"][6]["source"])
-ui = ui[:ui.index("# Gradio stays available via link")]
+ui = ui[:ui.index("# This ORIGINAL launch cell")]
 ui += f'''demo.queue(default_concurrency_limit=1).launch(
     server_name="0.0.0.0",
     server_port={port},

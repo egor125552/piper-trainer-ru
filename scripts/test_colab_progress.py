@@ -20,7 +20,7 @@ assert '"--trainer.enable_progress_bar"' in code[5]
 assert 'inline=False' in code[6] and 'quiet=True' in code[6]
 assert not any('RUN_ASR =' in cell or 'RUN_TRAINING =' in cell for cell in code)
 assert 'prepare_btn.click(' in code[6] and 'train_btn.click(' in code[6]
-assert 'print(line, end="", flush=True)' in code[5]
+assert "report_cell_progress(line)" in code[5]
 
 # Inspect the real runner created by the existing backend smoke; check the
 # nested f-string was expanded and its callback prints correct epoch numbers.
