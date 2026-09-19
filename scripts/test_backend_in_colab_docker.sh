@@ -72,6 +72,39 @@ checked, minutes = validate_dataset_for_training(local/'dataset')
 assert checked == 2
 assert minutes > 0
 assert phrase_quality_reason('Это незаконченная фраза...', 2.5)
+assert phrase_quality_reason('Мы начинаем проверку без конечного знака', 3.0, allow_unpunctuated_clause=True) is None
+assert unfinished_syntax('Мы должны быть готовы к')
+assert phrase_quality_reason('Мы должны быть готовы к', 3.0, allow_unpunctuated_clause=True)
+assert not unfinished_syntax('Мы закончили важную совместную работу')
+quiet = AudioSegment.silent(duration=400) + Sine(440).to_audio_segment(duration=2000).apply_gain(-12) + AudioSegment.silent(duration=400)
+assert natural_clause_boundary(quiet, 200, 2600)
+assert not natural_clause_boundary(Sine(440).to_audio_segment(duration=2500).apply_gain(-12), 200, 2200)
+
+original_transcribe = transcribe_file
+def transcribe_file(path):
+    if '000002' in Path(path).stem:
+        return 'Мы должны быть готовы к'
+    return 'Мы выполнили полезную проверку.'
+filtered, _, _, _ = prepare_dataset([str(src)], 'Review Voice', 400, -35, 1.0, 12, 100)
+assert len(filtered)==1
+review_local, _, _ = project_paths('Review Voice')
+needs_review = review_local/'dataset'/'needs_review.csv'
+assert needs_review.exists()
+assert 'needs_review_wav' in needs_review.read_text(encoding='utf-8')
+assert len(list((review_local/'dataset'/'needs_review_wav').glob('*.wav')))==1
+transcribe_file = original_transcribe
+clause_src=root/'clauses.wav'
+quiet.export(clause_src, format='wav')
+def transcribe_file(path):
+    return 'Здесь звучит обычная фраза'
+clauses, _, _, _ = prepare_dataset([str(clause_src)], 'Clause Voice', 200, -35, 1.0, 12, 350)
+assert len(clauses)==1, len(clauses)
+clause_local, _, _ = project_paths('Clause Voice')
+clause_files=(clause_local/'dataset'/'natural_clause_files.txt').read_text(encoding='utf-8').splitlines()
+assert len(clause_files)==1
+assert validate_dataset_for_training(clause_local/'dataset')[0]==1
+transcribe_file = original_transcribe
+
 continuous = Sine(440).to_audio_segment(duration=2500).apply_gain(-12)
 assert phrase_boundary_reason(continuous, 200, 2200, 100)
 
